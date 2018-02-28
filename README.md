@@ -1,6 +1,6 @@
 # twitterBaconizer
 
-## Searches for a path to Twitter mentions of Kevin Bacon through any series of @ mentions, retweets, and quotes.
+Searches for a path to Twitter mentions of Kevin Bacon through any series of @ mentions, retweets, and quotes.
 
 # Dependencies
 
