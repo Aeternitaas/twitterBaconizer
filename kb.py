@@ -4,7 +4,8 @@
 #
 #   Attempts to search for the 90's heartthrob Kevin Bacon through twitter mentions.
 # It, however, makes no attempt to minimize the distance, rather it simply looks for any
-# path using a Depth-limited, Best-First Search.
+# path using a Depth-limited, Best-First Search, forcing itself into circles discussing
+# topics that Kevin Bacon are most involved with.
 
 from twython import Twython
 from pprint import pprint
@@ -92,6 +93,7 @@ def getRecentBacon():
     returns: the concatenated tweet with the most favourites.
     '''
     query = "from:%s" % "@kevinbacon"
+    # query = "from:%s" % "@realDonaldTrump"        # example of an easy goal.
     search = twitter.search(q=query, tweet_mode='extended')
 
     quotedStatus = ""
@@ -103,6 +105,7 @@ def getRecentBacon():
     for i in range( 0, len(search["statuses"]) ):
         status = search["statuses"][i]
 
+        # obtain subtweets as well.
         if "quoted_status" in status:
             quotedStatus = status["quoted_status"]["full_text"]
             quotedfavoriteCount = status["quoted_status"]["favorite_count"]
@@ -129,18 +132,25 @@ def checkSimilarity( tweetList ):
 
     returns: the percentile value of similarity between tweets.
     '''
-    vect = TfidfVect(min_df=1)
+    vect = TfidfVect(min_df=1,stop_words="english")
     tfidf = vect.fit_transform(tweetList)
     return ((tfidf * tfidf.T).A)[0][1]
 
 def printPath( pathList, search, status ):
     '''
     Prints the path traversed to a goal handle.
+
+    args:
+        pathList: the path to a mention of Kevin Bacon.
+        search: the very last user that manages to mention Kevin Bacon.
+        status: the search metadata.
     '''
     for i in range( 0, len(pathList) ):
         print(pathList[i])
 
-    print( search + ", " + str(status["id_str"]) + ", " + str(status["full_text"]) )
+    # convert back to ASCII
+    string = search.encode('unicode_escape').decode('ascii', 'ignore') + ", " + str(status["id_str"]).encode('unicode_escape').decode('ascii', 'ignore') + ", " + str(status["full_text"].encode('unicode_escape').decode('ascii', 'ignore'))
+    print(string)
 
     return
 
@@ -155,33 +165,34 @@ def findBacon( searchName, baconString, traversed, depth, pathList ):
         depth - the maximum depth allowed to be travelled.
         pathList - the path traversed.
     '''
-    # twitter search setup 
+    # Twitter search setup 
     query = "from:%s" % searchName
     search = twitter.search(q=query, tweet_mode='extended')
 
     pq, handleList = [], []
     regexp = re.compile(r'@?[k|K]evin[ ]?[b|B]acon')
+    # regexp = re.compile(r'@?(real)?[d|D]onald[ ]?[t|T]rump')  # example of easy target.
     newPathList = list(pathList)
     depth -= 1
 
     # base cases:
     if depth == 0:
-        return 
+        return True
     if not search["statuses"]:
-        return
+        return True
 
     # parse a tuple of (mentions, tweet) of starting user.
     for i in range( 0, len(search["statuses"]) ):
         status = search["statuses"][i]
         if regexp.search(status["full_text"]):
-            print("Finished!")
+            print("\n\nFinished!")
             printPath( pathList, searchName, status )
-            return 
+            return True
         handleList.extend( getHandles( status ) )
 
     # if the person doesn't have any recent mentions, stop.
     if len(handleList) == 0:
-        return 
+        return True
 
     # create a PQ from the similarity values, associating them with a handle
     for i in range( 0, len(handleList) ):
@@ -211,8 +222,9 @@ def findBacon( searchName, baconString, traversed, depth, pathList ):
             newPathList = list(pathList)
             newPathList.append( searchName + ", " + nextId + ", " + nextText )
             time.sleep(5)                   # prevents overpolling
-            findBacon( nextHandle, baconString, traversed, depth, newPathList )
-
+            # if we have found a path, then end cycle.
+            if findBacon( nextHandle, baconString, traversed, depth, newPathList ):
+                break
             print("Finished traversing... " + nextHandle)
             sys.stdout.flush()
 
@@ -222,6 +234,9 @@ def findBacon( searchName, baconString, traversed, depth, pathList ):
     return
 
 def main():
+    '''
+    Main function, used to begin the process of searching.
+    '''
     depth = 1000
     baconString = ""
     traversed = {}
