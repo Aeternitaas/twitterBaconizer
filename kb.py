@@ -1,4 +1,11 @@
 # coding: utf-8
+# Author: Ket-Meng Jimmy Cheng
+# - "Six" Degrees of Kevin Bacon
+#
+#   Attempts to search for the 90's heartthrob Kevin Bacon through twitter mentions.
+# It, however, makes no attempt to minimize the distance, rather it simply looks for any
+# path using a Depth-limited, Best-First Search.
+
 from twython import Twython
 from pprint import pprint
 from sklearn.feature_extraction.text import TfidfVectorizer as TfidfVect
@@ -17,6 +24,7 @@ access_token_secret="fwE9ZtnYswd8hFUAjP2qaVfR4gsgDie62YnE6kZefm7cm"
 # twitter =  Twython(consumer_key, consumer_secret,
                     # access_token, access_token_secret)
 
+# Used OATH2 for more polling.
 twitter = Twython(consumer_key, consumer_secret, oauth_version=2)
 ACCESS_TOKEN = twitter.obtain_access_token()
 twitter = Twython(consumer_key, access_token=ACCESS_TOKEN)
@@ -32,35 +40,49 @@ def getHandles( tweet ):
     '''
     wordList, handleList = [], []
     quotedStatus = ""
-    text = tweet["full_text"]
 
-    tweetID = tweet["id_str"]
+    text = tweet["full_text"]   # text of the original tweet
+    tweetID = tweet["id_str"]   # tweet ID of the original tweet
 
     # if it is a quote, obtain quoted_status's text.
     if "quoted_status" in tweet:
-        quotedStatus = tweet["quoted_status"]["full_text"]
-        # remove @ handles from retweets to prevent traversing those paths as well.
-        quotedStatus = re.sub(r'@[A-Za-z0-9]', '', quotedStatus, flags=re.MULTILINE)
-        text = text + " " + quotedStatus + " @" + tweet["quoted_status"]["user"]["screen_name"]
+        text = getSubtweet( text, tweet, "quoted_status" )
 
     # if it is a retweet, obtain retweeted_status's text.
     elif "retweeted_status" in tweet:
-        quotedStatus = tweet["retweeted_status"]["full_text"]
-        quotedStatus = re.sub(r'@[A-Za-z0-9]', '', quotedStatus, flags=re.MULTILINE)
-        text = text + " " + quotedStatus + " @" + tweet["retweeted_status"]["user"]["screen_name"]
+        text = getSubtweet( text, tweet, "retweeted_status" )
 
     # convert all to lowercase and decode/encode utf-8.
     text = text.lower()
-    text = text.encode('unicode_escape').decode('ascii', 'ignore')    # decode Unicode-only characters.
+    text = text.encode('unicode_escape').decode('ascii', 'ignore')    
 
     # splits by spaces and colons to find handle easily.
-    wordList = re.split( '[: ]', text )
+    wordList = re.split( '[:\'\"\n_,.!? ]', text )
 
+    # generate list of tuples in the form of (handle, tweet text, tweet ID).
     for word in wordList:
         if len(word) > 1 and word[0] == '@':
             handleList.append( (word, text, tweetID) )
     
     return handleList
+
+def getSubtweet( text, tweet, subType ):
+    '''
+    Obtains subtweets from quoted_status and retweeted_status and strips handles.
+
+    args:
+        - text : the tweet text of the original tweeter.
+        - tweet : the tweet metadata.
+        - subType : the type of subtweet (quoted_status vs retweeted_status)
+
+    returns: the concatenation of the original text and the subtweeted text.
+    '''
+    subStatus = tweet[subType]["full_text"]
+    # remove @ handles from retweets to prevent traversing those paths as well.
+    subStatus = re.sub(r'@[A-Za-z0-9]', '', subStatus, flags=re.MULTILINE)
+    text = text + " " + subStatus + " @" + tweet[subType]["user"]["screen_name"]
+
+    return text
 
 def getRecentBacon():
     '''
@@ -90,8 +112,6 @@ def getRecentBacon():
 
         tweetList.append( (status["favorite_count"] + quotedFavoriteCount, status["full_text"] + " " + quotedStatus) )
     
-    tweetList.sort()
-
     # retrieve post with highest favourite count.
     tweet = (max( tweetList ))[1]
 
@@ -113,14 +133,18 @@ def checkSimilarity( tweetList ):
     tfidf = vect.fit_transform(tweetList)
     return ((tfidf * tfidf.T).A)[0][1]
 
-def printPath( pathList ):
-
+def printPath( pathList, search, status ):
+    '''
+    Prints the path traversed to a goal handle.
+    '''
     for i in range( 0, len(pathList) ):
         print(pathList[i])
 
+    print( search + ", " + str(status["id_str"]) + ", " + str(status["full_text"]) )
+
     return
 
-def findBacon( search, baconString, traversed, depth, pathList ):
+def findBacon( searchName, baconString, traversed, depth, pathList ):
     '''
     Recursive function for finding Kevin Bacon that performs a Depth-Limited DFS.
 
@@ -132,7 +156,7 @@ def findBacon( search, baconString, traversed, depth, pathList ):
         pathList - the path traversed.
     '''
     # twitter search setup 
-    query = "from:%s" % search
+    query = "from:%s" % searchName
     search = twitter.search(q=query, tweet_mode='extended')
 
     pq, handleList = [], []
@@ -149,18 +173,13 @@ def findBacon( search, baconString, traversed, depth, pathList ):
     # parse a tuple of (mentions, tweet) of starting user.
     for i in range( 0, len(search["statuses"]) ):
         status = search["statuses"][i]
-        print(status["full_text"])
         if regexp.search(status["full_text"]):
             print("Finished!")
-            printPath(pathList)
+            printPath( pathList, searchName, status )
             return 
         handleList.extend( getHandles( status ) )
 
-    # check if @kevinbacon is mentioned inside of the handleList 
-    # if "@kevinbacon" in handleList:
-        # print("Finished!")
-        # return 
-
+    # if the person doesn't have any recent mentions, stop.
     if len(handleList) == 0:
         return 
 
@@ -173,19 +192,27 @@ def findBacon( search, baconString, traversed, depth, pathList ):
     # empty the priority queue by its similarity number
     while pq:
         nextTuple = (heapq.heappop(pq))
-        nextSimilarity = nextTuple[0] * -1
+        nextSimilarity = nextTuple[0] * -1  # since heapq is a minheap, convert it back to a positive number.
         nextHandle = nextTuple[1]
         nextText = nextTuple[2]
         nextId = nextTuple[3]
-        print("next handle is...: " + nextHandle)
+
+        print( "Trying handle... " + nextHandle ) 
+        sys.stdout.flush()
+
         if nextHandle not in traversed:
-            traversed[nextHandle] = True
-            print("Traversing... " + nextHandle)        # TODO: Remove
+            traversed[nextHandle] = True    # mark as traversed
+
+            print( "Traversing... " + nextHandle ) 
+            print( str(nextSimilarity) + " " + nextText )
             sys.stdout.flush()
+
+            # create a new instance of a pathList to record the path to Kevin Bacon
             newPathList = list(pathList)
-            newPathList.append( search + ", " + nextID + ", " + nextText )
-            findBacon( nextHandle, baconString, traversed, depth, )
-            time.sleep(5)
+            newPathList.append( searchName + ", " + nextId + ", " + nextText )
+            time.sleep(5)                   # prevents overpolling
+            findBacon( nextHandle, baconString, traversed, depth, newPathList )
+
             print("Finished traversing... " + nextHandle)
             sys.stdout.flush()
 
@@ -210,8 +237,7 @@ def main():
     baconString = getRecentBacon()
     print( "Bacon String: " + baconString + "\n" )
 
-    raw_input()
-
+    # begin the search process.
     findBacon( sys.argv[1], baconString, traversed, depth, [] )
 
     return
