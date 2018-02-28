@@ -2,6 +2,8 @@
 
 Searches for a path to Twitter mentions of Kevin Bacon through any series of @ mentions, retweets, and quotes.
 
+Utilizes a Depth-Limited Best-First Search scheme, utilizing tf-idf string comparisons to measure similarity of tweets between Kevin Bacon and the origin user to determine the best path forward. 
+
 # Dependencies
 
 Uses numpy, scipy, and scikit-learn for Tf-Idf Vectorization.
