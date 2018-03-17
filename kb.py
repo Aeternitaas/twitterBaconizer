@@ -17,10 +17,10 @@ import re
 import heapq
 
 # enter your keys, and tokens obtained from your twitter app
-consumer_key="VjDIekyHP11VGZA7dIYSCRWkt"
-consumer_secret="NomxYPB8XMhjrELdaX5kg1UHWb32jvxFAzu9L95a50ADoidmOE"
-access_token="4113456820-XANkYBXvdIZ4ckPVNQkL28mR32tXdHt6cHn7DRZ"
-access_token_secret="fwE9ZtnYswd8hFUAjP2qaVfR4gsgDie62YnE6kZefm7cm"
+consumer_key=""
+consumer_secret=""
+access_token=""
+access_token_secret=""
 
 # twitter =  Twython(consumer_key, consumer_secret,
                     # access_token, access_token_secret)
